@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, GraduationCap, Settings, BookOpen, Wrench } from "lucide-react"
+import { Calendar, Clock, GraduationCap, Settings, BookOpen, Wrench, RefreshCw } from "lucide-react"
 import Link from "next/link"
 
 interface ScheduleEntry {
@@ -37,108 +37,49 @@ export default function HomePage() {
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
   const [selectedGrade, setSelectedGrade] = useState<string>("")
   const [availableGrades, setAvailableGrades] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   const generateId = () => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
   }
 
-  useEffect(() => {
+  const loadData = () => {
+    setIsLoading(true)
+
     // Cargar horarios desde localStorage
     const savedSchedules = localStorage.getItem("schoolSchedules")
-    if (savedSchedules) {
-      const parsedSchedules = JSON.parse(savedSchedules)
-      // Asegurar compatibilidad con datos antiguos
-      const schedulesWithType = parsedSchedules.map((s: any) => ({
-        ...s,
-        id: s.id || generateId(),
-        type: s.type || "teoria", // Valor por defecto para datos existentes
-        teacherType: s.teacherType || "titular", // Agregar tipo de docente
-      }))
-      setSchedules(schedulesWithType)
+    console.log("Datos cargados desde localStorage:", savedSchedules) // Debug
 
-      // Extraer grados únicos
-      const grades = [...new Set(schedulesWithType.map((s: ScheduleEntry) => s.grade))]
-      setAvailableGrades(grades)
-      if (grades.length > 0 && !selectedGrade) {
-        setSelectedGrade(grades[0])
+    if (savedSchedules) {
+      try {
+        const parsedSchedules = JSON.parse(savedSchedules)
+        console.log("Horarios parseados:", parsedSchedules) // Debug
+
+        // Asegurar compatibilidad con datos antiguos
+        const schedulesWithType = parsedSchedules.map((s: any) => ({
+          ...s,
+          id: s.id || generateId(),
+          type: s.type || "teoria",
+          teacherType: s.teacherType || "titular",
+        }))
+
+        setSchedules(schedulesWithType)
+
+        // Extraer grados únicos
+        const grades = [...new Set(schedulesWithType.map((s: ScheduleEntry) => s.grade))].sort()
+        console.log("Grados encontrados:", grades) // Debug
+
+        setAvailableGrades(grades)
+        if (grades.length > 0 && !selectedGrade) {
+          setSelectedGrade(grades[0])
+        }
+      } catch (error) {
+        console.error("Error parsing schedules:", error)
+        loadSampleData()
       }
     } else {
-      // Datos de ejemplo si no hay horarios cargados - actualizar con teacherType
-      const sampleData: ScheduleEntry[] = [
-        {
-          id: "1",
-          grade: "1° A",
-          day: "Lunes",
-          time: "08:00 - 08:45",
-          subject: "Matemáticas",
-          teacher: "Prof. García",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "2",
-          grade: "1° A",
-          day: "Lunes",
-          time: "08:45 - 09:30",
-          subject: "Lengua",
-          teacher: "Prof. Martínez",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "3",
-          grade: "1° A",
-          day: "Lunes",
-          time: "09:30 - 10:15",
-          subject: "Taller de Electrónica",
-          teacher: "Prof. López",
-          type: "taller",
-          teacherType: "suplente",
-        },
-        {
-          id: "4",
-          grade: "1° A",
-          day: "Martes",
-          time: "08:00 - 08:45",
-          subject: "Historia",
-          teacher: "Prof. Rodríguez",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "5",
-          grade: "1° A",
-          day: "Martes",
-          time: "08:45 - 09:30",
-          subject: "Taller de Mecánica",
-          teacher: "Prof. Fernández",
-          type: "taller",
-          teacherType: "provisional",
-        },
-        {
-          id: "6",
-          grade: "2° B",
-          day: "Lunes",
-          time: "08:00 - 08:45",
-          subject: "Física",
-          teacher: "Prof. Silva",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "7",
-          grade: "2° B",
-          day: "Lunes",
-          time: "08:45 - 09:30",
-          subject: "Taller de Programación",
-          teacher: "Prof. Morales",
-          type: "taller",
-          teacherType: "suplente",
-        },
-      ]
-      setSchedules(sampleData)
-      setAvailableGrades(["1° A", "2° B"])
-      setSelectedGrade("1° A")
+      console.log("No hay datos guardados, cargando datos de ejemplo") // Debug
+      loadSampleData()
     }
 
     // Cargar horarios personalizados
@@ -154,6 +95,125 @@ export default function HomePage() {
     } else {
       setCustomTimes(DEFAULT_TIMES)
     }
+
+    setIsLoading(false)
+  }
+
+  const loadSampleData = () => {
+    // Datos de ejemplo mejorados
+    const sampleData: ScheduleEntry[] = [
+      {
+        id: "1",
+        grade: "1° A",
+        day: "Lunes",
+        time: "08:00 - 08:45",
+        subject: "Matemáticas",
+        teacher: "Prof. García",
+        type: "teoria",
+        teacherType: "titular",
+      },
+      {
+        id: "2",
+        grade: "1° A",
+        day: "Lunes",
+        time: "08:45 - 09:30",
+        subject: "Lengua",
+        teacher: "Prof. Martínez",
+        type: "teoria",
+        teacherType: "titular",
+      },
+      {
+        id: "3",
+        grade: "1° A",
+        day: "Lunes",
+        time: "09:30 - 10:15",
+        subject: "Taller de Electrónica",
+        teacher: "Prof. López",
+        type: "taller",
+        teacherType: "suplente",
+      },
+      {
+        id: "4",
+        grade: "1° A",
+        day: "Martes",
+        time: "08:00 - 08:45",
+        subject: "Historia",
+        teacher: "Prof. Rodríguez",
+        type: "teoria",
+        teacherType: "titular",
+      },
+      {
+        id: "5",
+        grade: "1° A",
+        day: "Martes",
+        time: "08:45 - 09:30",
+        subject: "Taller de Mecánica",
+        teacher: "Prof. Fernández",
+        type: "taller",
+        teacherType: "provisional",
+      },
+      {
+        id: "6",
+        grade: "2° B",
+        day: "Lunes",
+        time: "08:00 - 08:45",
+        subject: "Física",
+        teacher: "Prof. Silva",
+        type: "teoria",
+        teacherType: "titular",
+      },
+      {
+        id: "7",
+        grade: "2° B",
+        day: "Lunes",
+        time: "08:45 - 09:30",
+        subject: "Taller de Programación",
+        teacher: "Prof. Morales",
+        type: "taller",
+        teacherType: "suplente",
+      },
+      {
+        id: "8",
+        grade: "1° A",
+        day: "Miércoles",
+        time: "08:00 - 08:45",
+        subject: "Química",
+        teacher: "Prof. Herrera",
+        type: "teoria",
+        teacherType: "titular",
+      },
+      {
+        id: "9",
+        grade: "1° A",
+        day: "Jueves",
+        time: "08:00 - 08:45",
+        subject: "Educación Física",
+        teacher: "Prof. Díaz",
+        type: "teoria",
+        teacherType: "titular",
+      },
+      {
+        id: "10",
+        grade: "1° A",
+        day: "Viernes",
+        time: "08:00 - 08:45",
+        subject: "Inglés",
+        teacher: "Prof. Wilson",
+        type: "teoria",
+        teacherType: "suplente",
+      },
+    ]
+
+    setSchedules(sampleData)
+    setAvailableGrades(["1° A", "2° B"])
+    setSelectedGrade("1° A")
+
+    // Guardar datos de ejemplo en localStorage para futuras cargas
+    localStorage.setItem("schoolSchedules", JSON.stringify(sampleData))
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
 
   const getScheduleForGradeAndDay = (grade: string, day: string, time: string) => {
@@ -199,6 +259,17 @@ export default function HomePage() {
 
   const filteredSchedules = schedules.filter((s) => s.grade === selectedGrade)
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Cargando horarios...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <header className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-white/20">
@@ -217,15 +288,25 @@ export default function HomePage() {
                 <p className="text-sm text-slate-600">Horarios Académicos</p>
               </div>
             </div>
-            <Link href="/admin/login">
+            <div className="flex gap-2">
               <Button
                 variant="outline"
-                className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200"
+                onClick={loadData}
+                className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
               >
-                <Settings className="h-4 w-4" />
-                Administración
+                <RefreshCw className="h-4 w-4" />
+                Actualizar
               </Button>
-            </Link>
+              <Link href="/admin/login">
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200"
+                >
+                  <Settings className="h-4 w-4" />
+                  Administración
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
@@ -253,6 +334,9 @@ export default function HomePage() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-sm text-slate-600 mt-2">
+                Total de horarios cargados: {schedules.length} | Curso actual: {filteredSchedules.length} horarios
+              </p>
             </div>
           ) : (
             <Card className="mb-6 bg-white/70 backdrop-blur-sm border-slate-200 shadow-lg">
@@ -265,11 +349,21 @@ export default function HomePage() {
                   <p className="text-slate-600 mb-4">
                     Para comenzar, sube un archivo Excel con los horarios desde el panel de administración.
                   </p>
-                  <Link href="/admin">
-                    <Button className="bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-600 hover:to-blue-700 text-white shadow-lg">
-                      Ir a Administración
+                  <div className="flex gap-2 justify-center">
+                    <Button
+                      onClick={loadData}
+                      variant="outline"
+                      className="bg-white/50 border-blue-200 hover:bg-blue-50"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Recargar Datos
                     </Button>
-                  </Link>
+                    <Link href="/admin">
+                      <Button className="bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-600 hover:to-blue-700 text-white shadow-lg">
+                        Ir a Administración
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -286,7 +380,7 @@ export default function HomePage() {
                 Horario - {selectedGrade}
               </CardTitle>
               <CardDescription className="text-slate-600">
-                Horario semanal del curso seleccionado
+                Horario semanal del curso seleccionado ({filteredSchedules.length} materias asignadas)
                 <div className="flex items-center gap-4 mt-2 text-xs">
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded bg-gradient-to-br from-emerald-500 to-emerald-600"></div>
@@ -353,6 +447,11 @@ export default function HomePage() {
                                         {entry!.subject}
                                       </div>
                                       <div className={`text-xs ${styles.text} opacity-90`}>{entry!.teacher}</div>
+                                      {entry!.teacherType !== "titular" && (
+                                        <div className={`text-xs ${styles.text} opacity-75 italic`}>
+                                          ({entry!.teacherType})
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
