@@ -1,16 +1,77 @@
-# GitHub Pages
+# Sistema de Horarios - ESCUELA TECNICA Nº6
 
-<img src="https://octodex.github.com/images/Professortocat_v2.png" align="right" height="200px" />
+Sistema web para gestionar y visualizar horarios académicos de la ESCUELA TECNICA Nº6 "ING. JUAN V. PASSALACQUA".
 
-Hey @EmaPassa!
+## Características
 
-Mona here. I'm done preparing your exercise. Hope you enjoy! 💚
+- 📅 Visualización de horarios por curso
+- 📊 Carga de horarios desde archivos Excel
+- 🔐 Panel de administración protegido con contraseña
+- 📱 Diseño responsive
+- 🎨 Interfaz moderna con el logo institucional
 
-Remember, it's self-paced so feel free to take a break! ☕️
+## Instalación Local
 
-[![](https://img.shields.io/badge/Go%20to%20Exercise-%E2%86%92-1f883d?style=for-the-badge&logo=github&labelColor=197935)](https://github.com/EmaPassa/PassaHorarios/issues/1)
+1. Clona o descarga el proyecto
+2. Instala las dependencias:
+   \`\`\`bash
+   npm install
+   \`\`\`
+3. Ejecuta en modo desarrollo:
+   \`\`\`bash
+   npm run dev
+   \`\`\`
+4. Abre [http://localhost:3000](http://localhost:3000)
 
----
+## Despliegue en Netlify
 
-&copy; 2025 GitHub &bull; [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md) &bull; [MIT License](https://gh.io/mit)
+1. Construye el proyecto:
+   \`\`\`bash
+   npm run build
+   \`\`\`
+2. Sube la carpeta `out` a Netlify
+3. O conecta tu repositorio de GitHub con Netlify para despliegue automático
 
+## Uso
+
+### Acceso Público
+- Visualiza horarios por curso en la página principal
+- Selecciona diferentes cursos desde el dropdown
+
+### Panel de Administración
+- Accede desde el botón "Administración"
+- **Contraseña por defecto**: `admin2024`
+- Sube archivos Excel con horarios
+- Descarga plantilla de ejemplo
+
+### Formato del Excel
+El archivo debe tener 5 columnas:
+1. **Curso** (ej: "1° A")
+2. **Día** (Lunes, Martes, etc.)
+3. **Horario** (ej: "08:00 - 08:45")
+4. **Materia** (ej: "Matemáticas")
+5. **Profesor** (ej: "Prof. García")
+
+## Configuración
+
+### Cambiar Contraseña de Administración
+Edita el archivo `app/admin/login/page.tsx`, línea 15:
+\`\`\`tsx
+const ADMIN_PASSWORD = "tu_nueva_contraseña"
+\`\`\`
+
+### Personalizar Horarios
+Los horarios se definen en `app/page.tsx`, variable `TIMES`.
+
+## Tecnologías
+
+- Next.js 14
+- React 18
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- xlsx (para procesar Excel)
+
+## Soporte
+
+Para soporte técnico, contacta al administrador del sistema.
