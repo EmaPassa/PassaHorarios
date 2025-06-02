@@ -18,6 +18,7 @@ interface ScheduleEntry {
 }
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+
 const TIMES = [
   "08:00 - 08:45",
   "08:45 - 09:30",
@@ -31,9 +32,27 @@ const TIMES = [
 ]
 
 export default function HomePage() {
+  const [customTimes, setCustomTimes] = useState<string[]>([])
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
   const [selectedGrade, setSelectedGrade] = useState<string>("")
   const [availableGrades, setAvailableGrades] = useState<string[]>([])
+
+  const generateId = () => {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  }
+
+  const loadCustomTimes = () => {
+    const savedTimes = localStorage.getItem("schoolTimes")
+    if (savedTimes) {
+      try {
+        const parsed = JSON.parse(savedTimes)
+        setCustomTimes(parsed)
+      } catch (error) {
+        console.error("Error parsing times:", error)
+        setCustomTimes([])
+      }
+    }
+  }
 
   useEffect(() => {
     // Cargar horarios desde localStorage
@@ -125,11 +144,10 @@ export default function HomePage() {
       setAvailableGrades(["1° A", "2° B"])
       setSelectedGrade("1° A")
     }
-  }, [])
 
-  const generateId = () => {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-  }
+    // Cargar horarios personalizados
+    loadCustomTimes()
+  }, [])
 
   const getScheduleForGradeAndDay = (grade: string, day: string, time: string) => {
     return schedules.find((s) => s.grade === grade && s.day === day && s.time === time)
