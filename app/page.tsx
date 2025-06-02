@@ -15,11 +15,12 @@ interface ScheduleEntry {
   subject: string
   teacher: string
   type: "teoria" | "taller"
+  teacherType: string
 }
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
 
-const TIMES = [
+const DEFAULT_TIMES = [
   "08:00 - 08:45",
   "08:45 - 09:30",
   "09:30 - 10:15",
@@ -41,19 +42,6 @@ export default function HomePage() {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
   }
 
-  const loadCustomTimes = () => {
-    const savedTimes = localStorage.getItem("schoolTimes")
-    if (savedTimes) {
-      try {
-        const parsed = JSON.parse(savedTimes)
-        setCustomTimes(parsed)
-      } catch (error) {
-        console.error("Error parsing times:", error)
-        setCustomTimes([])
-      }
-    }
-  }
-
   useEffect(() => {
     // Cargar horarios desde localStorage
     const savedSchedules = localStorage.getItem("schoolSchedules")
@@ -64,6 +52,7 @@ export default function HomePage() {
         ...s,
         id: s.id || generateId(),
         type: s.type || "teoria", // Valor por defecto para datos existentes
+        teacherType: s.teacherType || "titular", // Agregar tipo de docente
       }))
       setSchedules(schedulesWithType)
 
@@ -74,7 +63,7 @@ export default function HomePage() {
         setSelectedGrade(grades[0])
       }
     } else {
-      // Datos de ejemplo si no hay horarios cargados
+      // Datos de ejemplo si no hay horarios cargados - actualizar con teacherType
       const sampleData: ScheduleEntry[] = [
         {
           id: "1",
@@ -84,6 +73,7 @@ export default function HomePage() {
           subject: "Matemáticas",
           teacher: "Prof. García",
           type: "teoria",
+          teacherType: "titular",
         },
         {
           id: "2",
@@ -93,6 +83,7 @@ export default function HomePage() {
           subject: "Lengua",
           teacher: "Prof. Martínez",
           type: "teoria",
+          teacherType: "titular",
         },
         {
           id: "3",
@@ -102,6 +93,7 @@ export default function HomePage() {
           subject: "Taller de Electrónica",
           teacher: "Prof. López",
           type: "taller",
+          teacherType: "suplente",
         },
         {
           id: "4",
@@ -111,6 +103,7 @@ export default function HomePage() {
           subject: "Historia",
           teacher: "Prof. Rodríguez",
           type: "teoria",
+          teacherType: "titular",
         },
         {
           id: "5",
@@ -120,6 +113,7 @@ export default function HomePage() {
           subject: "Taller de Mecánica",
           teacher: "Prof. Fernández",
           type: "taller",
+          teacherType: "provisional",
         },
         {
           id: "6",
@@ -129,6 +123,7 @@ export default function HomePage() {
           subject: "Física",
           teacher: "Prof. Silva",
           type: "teoria",
+          teacherType: "titular",
         },
         {
           id: "7",
@@ -138,6 +133,7 @@ export default function HomePage() {
           subject: "Taller de Programación",
           teacher: "Prof. Morales",
           type: "taller",
+          teacherType: "suplente",
         },
       ]
       setSchedules(sampleData)
@@ -146,7 +142,18 @@ export default function HomePage() {
     }
 
     // Cargar horarios personalizados
-    loadCustomTimes()
+    const savedTimes = localStorage.getItem("schoolTimes")
+    if (savedTimes) {
+      try {
+        const parsed = JSON.parse(savedTimes)
+        setCustomTimes(parsed)
+      } catch (error) {
+        console.error("Error parsing times:", error)
+        setCustomTimes(DEFAULT_TIMES)
+      }
+    } else {
+      setCustomTimes(DEFAULT_TIMES)
+    }
   }, [])
 
   const getScheduleForGradeAndDay = (grade: string, day: string, time: string) => {
@@ -317,7 +324,7 @@ export default function HomePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {TIMES.map((time, index) => (
+                    {customTimes.map((time, index) => (
                       <tr key={time} className={`border-b border-slate-100 ${index % 2 === 0 ? "bg-white/50" : ""}`}>
                         <td className="p-4 font-medium text-slate-700 bg-gradient-to-r from-slate-50/50 to-white/50">
                           {time}
