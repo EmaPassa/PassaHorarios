@@ -170,13 +170,41 @@ export default function HomePage() {
   }
 
   const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
-    if (time === "11:00 - 11:15") {
+    if (time === "09:40 - 09:50") {
       // Recreo
       return {
         background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
         border: "border-amber-200",
         text: "text-amber-900",
         icon: null,
+}
+  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
+    if (time === "15:00 - 15:10") {
+      // Recreo
+      return {
+        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+        border: "border-amber-200",
+        text: "text-amber-900",
+        icon: null,
+}
+  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
+    if (time === "18:10 - 18:20") {
+      // Recreo
+      return {
+        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+        border: "border-amber-200",
+        text: "text-amber-900",
+        icon: null,
+}
+  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
+    if (time === "20:20 - 20:30") {
+      // Recreo
+      return {
+        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+        border: "border-amber-200",
+        text: "text-amber-900",
+        icon: null,
+
       }
     }
 
