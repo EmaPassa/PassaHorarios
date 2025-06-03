@@ -41,6 +41,14 @@ const DEFAULT_TIMES = [
   "21:30 - 22:30",
 ]
 
+// Definir los horarios de recreo
+const RECREO_TIMES = [
+  "09:40 - 09:50",
+  "15:00 - 15:10", 
+  "18:10 - 18:20",
+  "20:20 - 20:30"
+]
+
 export default function HomePage() {
   const [customTimes, setCustomTimes] = useState<string[]>([])
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
@@ -170,12 +178,8 @@ export default function HomePage() {
   }
 
   const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
-    if (time === "09:40 - 09:50",
-    "15:00 - 15:10",
-    "18:10 - 18:20",
-    "20:20 - 20:30",
-       ) {
-      // Recreo
+    // Verificar si es hora de recreo
+    if (RECREO_TIMES.includes(time)) {
       return {
         background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
         border: "border-amber-200",
@@ -345,17 +349,18 @@ export default function HomePage() {
                         {DAYS.map((day) => {
                           const entry = getScheduleForGradeAndDay(selectedGrade, day, time)
                           const styles = getSubjectStyles(entry, time)
+                          const isRecreo = RECREO_TIMES.includes(time)
 
                           return (
                             <td key={`${day}-${time}`} className="p-2">
-                              {entry || time === "11:00 - 11:15" ? (
+                              {entry || isRecreo ? (
                                 <div
                                   className={`p-3 rounded-lg shadow-sm border-2 ${styles.border} transition-all duration-200 hover:shadow-md`}
                                   style={{
                                     background: styles.background,
                                   }}
                                 >
-                                  {time === "11:00 - 11:15" ? (
+                                  {isRecreo ? (
                                     <div className="text-center">
                                       <div className="font-bold text-amber-900 text-sm">RECREO</div>
                                     </div>
