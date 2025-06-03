@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, GraduationCap, Settings, BookOpen, Wrench } from "lucide-react"
+import { Calendar, Clock, GraduationCap, Settings, BookOpen, Wrench, RefreshCw } from "lucide-react"
 import Link from "next/link"
 
 interface ScheduleEntry {
@@ -49,115 +49,132 @@ const RECREO_TIMES = [
   "20:20 - 20:30"
 ]
 
+// URL de tu Google Sheet en formato CSV
+// Reemplaza SHEET_ID con tu ID real y SHEET_NAME con el nombre de la hoja
+const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1C1st8qO7UEYZPQZUR39g6mR8GR-BrEWr/export?format=csv&gid=0"
+
 export default function HomePage() {
   const [customTimes, setCustomTimes] = useState<string[]>([])
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
   const [selectedGrade, setSelectedGrade] = useState<string>("")
   const [availableGrades, setAvailableGrades] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const generateId = () => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
   }
 
-  useEffect(() => {
-    // Cargar horarios desde localStorage
-    const savedSchedules = localStorage.getItem("schoolSchedules")
-    if (savedSchedules) {
-      const parsedSchedules = JSON.parse(savedSchedules)
-      // Asegurar compatibilidad con datos antiguos
-      const schedulesWithType = parsedSchedules.map((s: any) => ({
-        ...s,
-        id: s.id || generateId(),
-        type: s.type || "teoria", // Valor por defecto para datos existentes
-        teacherType: s.teacherType || "titular", // Agregar tipo de docente
-      }))
-      setSchedules(schedulesWithType)
-
-      // Extraer grados únicos
-      const grades = [...new Set(schedulesWithType.map((s: ScheduleEntry) => s.grade))]
-      setAvailableGrades(grades)
-      if (grades.length > 0 && !selectedGrade) {
-        setSelectedGrade(grades[0])
+  // Función para parsear CSV
+  const parseCSV = (csvText: string): ScheduleEntry[] => {
+    const lines = csvText.split('\n')
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+    
+    const scheduleEntries: ScheduleEntry[] = []
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      
+      const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+      
+      // Asumiendo que las columnas en tu Excel son:
+      // Grado, Día, Horario, Materia, Profesor, Tipo, TipoDocente
+      if (values.length >= 7) {
+        const entry: ScheduleEntry = {
+          id: generateId(),
+          grade: values[0] || '',
+          day: values[1] || '',
+          time: values[2] || '',
+          subject: values[3] || '',
+          teacher: values[4] || '',
+          type: (values[5]?.toLowerCase() === 'taller' ? 'taller' : 'teoria') as "teoria" | "taller",
+          teacherType: values[6] || 'titular'
+        }
+        
+        if (entry.grade && entry.day && entry.time && entry.subject) {
+          scheduleEntries.push(entry)
+        }
       }
-    } else {
-      // Datos de ejemplo si no hay horarios cargados - actualizar con teacherType
-      const sampleData: ScheduleEntry[] = [
-        {
-          id: "1",
-          grade: "1° A",
-          day: "Lunes",
-          time: "08:00 - 08:45",
-          subject: "Matemáticas",
-          teacher: "Prof. García",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "2",
-          grade: "1° A",
-          day: "Lunes",
-          time: "08:45 - 09:30",
-          subject: "Lengua",
-          teacher: "Prof. Martínez",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "3",
-          grade: "1° A",
-          day: "Lunes",
-          time: "09:30 - 10:15",
-          subject: "Taller de Electrónica",
-          teacher: "Prof. López",
-          type: "taller",
-          teacherType: "suplente",
-        },
-        {
-          id: "4",
-          grade: "1° A",
-          day: "Martes",
-          time: "08:00 - 08:45",
-          subject: "Historia",
-          teacher: "Prof. Rodríguez",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "5",
-          grade: "1° A",
-          day: "Martes",
-          time: "08:45 - 09:30",
-          subject: "Taller de Mecánica",
-          teacher: "Prof. Fernández",
-          type: "taller",
-          teacherType: "provisional",
-        },
-        {
-          id: "6",
-          grade: "2° B",
-          day: "Lunes",
-          time: "08:00 - 08:45",
-          subject: "Física",
-          teacher: "Prof. Silva",
-          type: "teoria",
-          teacherType: "titular",
-        },
-        {
-          id: "7",
-          grade: "2° B",
-          day: "Lunes",
-          time: "08:45 - 09:30",
-          subject: "Taller de Programación",
-          teacher: "Prof. Morales",
-          type: "taller",
-          teacherType: "suplente",
-        },
-      ]
-      setSchedules(sampleData)
-      setAvailableGrades(["1° A", "2° B"])
-      setSelectedGrade("1° A")
     }
+    
+    return scheduleEntries
+  }
 
+  // Función para cargar datos desde Google Sheets
+  const loadFromGoogleSheets = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch(GOOGLE_SHEET_CSV_URL, {
+        mode: 'cors',
+        headers: {
+          'Accept': 'text/csv'
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Error al cargar datos: ${response.status}`)
+      }
+      
+      const csvText = await response.text()
+      const parsedSchedules = parseCSV(csvText)
+      
+      if (parsedSchedules.length > 0) {
+        setSchedules(parsedSchedules)
+        
+        // Extraer grados únicos
+        const grades = [...new Set(parsedSchedules.map((s: ScheduleEntry) => s.grade))]
+        setAvailableGrades(grades)
+        
+        if (grades.length > 0 && !selectedGrade) {
+          setSelectedGrade(grades[0])
+        }
+        
+        setLastUpdated(new Date())
+        
+        // Guardar en localStorage como respaldo
+        const dataToSave = JSON.stringify(parsedSchedules)
+        localStorage.setItem("schoolSchedules", dataToSave)
+        
+      } else {
+        throw new Error("No se encontraron datos válidos en la hoja de cálculo")
+      }
+      
+    } catch (err) {
+      console.error("Error loading from Google Sheets:", err)
+      setError(err instanceof Error ? err.message : "Error desconocido")
+      
+      // Intentar cargar datos de respaldo desde localStorage
+      const savedSchedules = localStorage.getItem("schoolSchedules")
+      if (savedSchedules) {
+        try {
+          const parsedSchedules = JSON.parse(savedSchedules)
+          const schedulesWithType = parsedSchedules.map((s: any) => ({
+            ...s,
+            id: s.id || generateId(),
+            type: s.type || "teoria",
+            teacherType: s.teacherType || "titular",
+          }))
+          setSchedules(schedulesWithType)
+          
+          const grades = [...new Set(schedulesWithType.map((s: ScheduleEntry) => s.grade))]
+          setAvailableGrades(grades)
+          if (grades.length > 0 && !selectedGrade) {
+            setSelectedGrade(grades[0])
+          }
+        } catch (parseError) {
+          console.error("Error parsing backup data:", parseError)
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     // Cargar horarios personalizados
     const savedTimes = localStorage.getItem("schoolTimes")
     if (savedTimes) {
@@ -171,6 +188,9 @@ export default function HomePage() {
     } else {
       setCustomTimes(DEFAULT_TIMES)
     }
+
+    // Cargar datos desde Google Sheets
+    loadFromGoogleSheets()
   }, [])
 
   const getScheduleForGradeAndDay = (grade: string, day: string, time: string) => {
@@ -234,20 +254,52 @@ export default function HomePage() {
                 <p className="text-sm text-slate-600">Horarios Académicos</p>
               </div>
             </div>
-            <Link href="/admin/login">
+            <div className="flex items-center gap-3">
               <Button
+                onClick={loadFromGoogleSheets}
+                disabled={loading}
                 variant="outline"
-                className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200"
+                size="sm"
+                className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
               >
-                <Settings className="h-4 w-4" />
-                Administración
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Actualizando...' : 'Actualizar'}
               </Button>
-            </Link>
+              <Link href="/admin/login">
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200"
+                >
+                  <Settings className="h-4 w-4" />
+                  Administración
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Mostrar estado de carga y errores */}
+        {error && (
+          <Card className="mb-6 bg-red-50 border-red-200">
+            <CardContent className="pt-6">
+              <div className="text-red-700">
+                <strong>Error:</strong> {error}
+                <br />
+                <small>Se están mostrando los datos de respaldo si están disponibles.</small>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Mostrar última actualización */}
+        {lastUpdated && (
+          <div className="mb-4 text-sm text-slate-600">
+            Última actualización: {lastUpdated.toLocaleString()}
+          </div>
+        )}
+
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-6">
             <div className="p-2 bg-gradient-to-br from-emerald-500 to-blue-600 rounded-lg shadow-lg">
@@ -278,15 +330,30 @@ export default function HomePage() {
                   <div className="p-4 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full w-fit mx-auto mb-4">
                     <Clock className="h-12 w-12 text-slate-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-slate-900 mb-2">No hay horarios cargados</h3>
+                  <h3 className="text-lg font-medium text-slate-900 mb-2">
+                    {loading ? 'Cargando horarios...' : 'No hay horarios cargados'}
+                  </h3>
                   <p className="text-slate-600 mb-4">
-                    Para comenzar, sube un archivo Excel con los horarios desde el panel de administración.
+                    {loading 
+                      ? 'Obteniendo datos desde Google Sheets...'
+                      : 'Verifica que la hoja de Google Sheets esté configurada correctamente y sea pública.'
+                    }
                   </p>
-                  <Link href="/admin">
-                    <Button className="bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-600 hover:to-blue-700 text-white shadow-lg">
-                      Ir a Administración
-                    </Button>
-                  </Link>
+                  {!loading && (
+                    <div className="space-y-2">
+                      <Button 
+                        onClick={loadFromGoogleSheets}
+                        className="bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-600 hover:to-blue-700 text-white shadow-lg mr-2"
+                      >
+                        Intentar Cargar Datos
+                      </Button>
+                      <Link href="/admin">
+                        <Button variant="outline">
+                          Ir a Administración
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -303,7 +370,7 @@ export default function HomePage() {
                 Horario - {selectedGrade}
               </CardTitle>
               <CardDescription className="text-slate-600">
-                Horario semanal del curso seleccionado
+                Horario semanal del curso seleccionado (Datos desde Google Sheets)
                 <div className="flex items-center gap-4 mt-2 text-xs">
                   <div className="flex items-center gap-1">
                     <div className="w-3 h-3 rounded bg-gradient-to-br from-emerald-500 to-emerald-600"></div>
