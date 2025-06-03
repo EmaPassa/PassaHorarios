@@ -169,70 +169,49 @@ export default function HomePage() {
     return schedules.find((s) => s.grade === grade && s.day === day && s.time === time)
   }
 
-  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
-    if (time === "09:40 - 09:50") {
-      // Recreo
-      return {
-        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
-        border: "border-amber-200",
-        text: "text-amber-900",
-        icon: null,
-}
-  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
-    if (time === "15:00 - 15:10") {
-      // Recreo
-      return {
-        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
-        border: "border-amber-200",
-        text: "text-amber-900",
-        icon: null,
-}
-  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
-    if (time === "18:10 - 18:20") {
-      // Recreo
-      return {
-        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
-        border: "border-amber-200",
-        text: "text-amber-900",
-        icon: null,
-}
-  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
-    if (time === "20:20 - 20:30") {
-      // Recreo
-      return {
-        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
-        border: "border-amber-200",
-        text: "text-amber-900",
-        icon: null,
+ const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
+  const breakTimes = [
+    "09:40 - 09:50",
+    "15:00 - 15:10",
+    "18:10 - 18:20",
+    "20:20 - 20:30",
+  ]
 
-      }
-    }
-
-    if (!entry) {
-      return {
-        background: "bg-gray-50",
-        border: "border-gray-200",
-        text: "text-gray-400",
-        icon: null,
-      }
-    }
-
-    if (entry.type === "teoria") {
-      return {
-        background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-        border: "border-emerald-200",
-        text: "text-white",
-        icon: <BookOpen className="h-3 w-3" />,
-      }
-    } else {
-      return {
-        background: "linear-gradient(135deg, #34d399 0%, #10b981 100%)",
-        border: "border-green-200",
-        text: "text-white",
-        icon: <Wrench className="h-3 w-3" />,
-      }
+  if (breakTimes.includes(time)) {
+    // Recreo
+    return {
+      background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+      border: "border-amber-200",
+      text: "text-amber-900",
+      icon: null,
     }
   }
+
+  if (!entry) {
+    return {
+      background: "bg-gray-50",
+      border: "border-gray-200",
+      text: "text-gray-400",
+      icon: null,
+    }
+  }
+
+  if (entry.type === "teoria") {
+    return {
+      background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+      border: "border-emerald-200",
+      text: "text-white",
+      icon: <BookOpen className="h-3 w-3" />,
+    }
+  } else {
+    return {
+      background: "linear-gradient(135deg, #34d399 0%, #10b981 100%)",
+      border: "border-green-200",
+      text: "text-white",
+      icon: <Wrench className="h-3 w-3" />,
+    }
+  }
+}
 
   const filteredSchedules = schedules.filter((s) => s.grade === selectedGrade)
 
