@@ -1,38 +1,11 @@
 "use client"
 
-import type React from "react"
-import { useState, useRef, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Upload,
-  FileSpreadsheet,
-  CheckCircle,
-  AlertCircle,
-  ArrowLeft,
-  Download,
-  LogOut,
-  Plus,
-  Trash2,
-  Save,
-  Edit,
-  X,
-  BookOpen,
-  Wrench,
-  Clock,
-  Eye,
-  Users,
-  GraduationCap,
-  RefreshCw,
-} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Calendar, Clock, GraduationCap, Settings, BookOpen, Wrench, RefreshCw } from "lucide-react"
 import Link from "next/link"
-import * as XLSX from "xlsx"
-import { useRouter } from "next/navigation"
 
 interface ScheduleEntry {
   id: string
@@ -42,80 +15,117 @@ interface ScheduleEntry {
   subject: string
   teacher: string
   type: "teoria" | "taller"
-  teacherType: "titular" | "suplente" | "provisional"
+  teacherType: string
 }
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+
 const DEFAULT_TIMES = [
   "07:40 - 08:40",
   "08:40 - 09:40",
-  "09:40 - 09:50",
+  "09:40 - 09:50", // Recreo
   "09:50 - 10:50",
   "10:50 - 11:50", 
   "11:55 - 12:55",
   "13:00 - 14:00",
   "14:00 - 15:00",
-  "15:00 - 15:10",
+  "15:00 - 15:10", // Recreo
   "15:10 - 16:10",
-  "16:10 - 17:10", 
-  "17:15 - 18:15",
-  "17:20 - 18:20",
+  "16:10 - 17:10",
+  "17:10 - 18:10",
+  "18:10 - 18:20", // Recreo
   "18:20 - 19:20",
-  "19:20 - 19:30",
-  "19:30 - 20:30", 
+  "19:20 - 20:20",
+  "20:20 - 20:30", // Recreo
   "20:30 - 21:30",
   "21:30 - 22:30",
 ]
 
+// Definir los horarios de recreo
+const RECREO_TIMES = [
+  "09:40 - 09:50",
+  "15:00 - 15:10", 
+  "18:10 - 18:20",
+  "20:20 - 20:30"
+]
+
 // URL de tu Google Sheet en formato CSV
+// Reemplaza SHEET_ID con tu ID real y SHEET_NAME con el nombre de la hoja
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1C1st8qO7UEYZPQZUR39g6mR8GR-BrEWr/export?format=csv&gid=0"
 
-export default function AdminPage() {
-  const [file, setFile] = useState<File | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: "success" | "error" | "warning"; text: string } | null>(null)
-  const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
-  const [grades, setGrades] = useState<string[]>([])
-  const [selectedGrade, setSelectedGrade] = useState<string>("Todos los cursos")
-  const [editMode, setEditMode] = useState<string | null>(null)
-  const [editingEntry, setEditingEntry] = useState<ScheduleEntry | null>(null)
-  const [newEntry, setNewEntry] = useState<Partial<ScheduleEntry>>({
-    grade: "",
-    day: "",
-    time: "",
-    subject: "",
-    teacher: "",
-    type: "teoria",
-    teacherType: "titular",
-  })
-  const fileInputRef = useRef<HTMLInputElement>(null)
+export default function HomePage() {
   const [customTimes, setCustomTimes] = useState<string[]>([])
-  const [newTime, setNewTime] = useState("")
-  const [editingTime, setEditingTime] = useState<{ index: number; value: string } | null>(null)
-  const [selectedSubject, setSelectedSubject] = useState<string>("Todas las materias")
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>([])
+  const [schedules, setSchedules] = useState<ScheduleEntry[]>([])
+  const [selectedGrade, setSelectedGrade] = useState<string>("")
+  const [availableGrades, setAvailableGrades] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-
-  const router = useRouter()
 
   const generateId = () => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
   }
 
+  // Función auxiliar para parsear líneas CSV correctamente
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // Comilla escapada
+          current += '"'
+          i++ // Saltar la siguiente comilla
+        } else {
+          // Cambiar estado de comillas
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Separador encontrado fuera de comillas
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    
+    // Añadir el último campo
+    result.push(current.trim())
+    
+    return result.map(field => field.replace(/^"(.*)"$/, '$1'))
+  }
+
+  // Función mejorada para parsear CSV con mejor manejo de errores
   const parseCSV = (csvText: string): ScheduleEntry[] => {
     try {
       const lines = csvText.split('\n').map(line => line.trim()).filter(line => line)
-      if (lines.length === 0) throw new Error("CSV vacío")
       
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1'))
+      if (lines.length === 0) {
+        throw new Error("CSV vacío")
+      }
+      
+      // Parsear headers - manejar comillas y espacios
+      const headers = lines[0]
+        .split(',')
+        .map(h => h.trim().replace(/^"(.*)"$/, '$1'))
+      
+      console.log("Headers encontrados:", headers)
+      
       const scheduleEntries: ScheduleEntry[] = []
       
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i]
         if (!line) continue
         
-        const values = line.split(',').map(v => v.trim().replace(/^"(.*)"$/, '$1'))
+        // Mejorar el parsing de CSV para manejar comas dentro de comillas
+        const values = parseCSVLine(line)
         
+        // Mapear columnas - ajustar según tu estructura
+        // Asumir: Grado, Día, Horario, Materia, Profesor, Tipo, TipoDocente
         if (values.length >= 6) {
           const entry: ScheduleEntry = {
             id: generateId(),
@@ -125,584 +135,234 @@ export default function AdminPage() {
             subject: values[3]?.toString().trim() || '',
             teacher: values[4]?.toString().trim() || '',
             type: (values[5]?.toString().toLowerCase().trim() === 'taller' ? 'taller' : 'teoria') as "teoria" | "taller",
-            teacherType: (values[6]?.toString().toLowerCase().trim() as "titular" | "suplente" | "provisional") || 'titular'
+            teacherType: values[6]?.toString().trim() || 'titular'
           }
           
+          // Validar que tenga los campos esenciales
           if (entry.grade && entry.day && entry.time && entry.subject) {
             scheduleEntries.push(entry)
+          } else {
+            console.warn(`Fila ${i} tiene datos incompletos:`, entry)
           }
+        } else {
+          console.warn(`Fila ${i} no tiene suficientes columnas:`, values)
         }
       }
       
+      console.log(`Parseados ${scheduleEntries.length} entradas de horarios`)
       return scheduleEntries
+      
     } catch (error) {
       console.error("Error parseando CSV:", error)
-      throw error
+      throw new Error(`Error al procesar los datos: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
+  // Función mejorada para cargar datos desde Google Sheets
   const loadFromGoogleSheets = async () => {
     setLoading(true)
-    setMessage(null)
+    setError(null)
     
     try {
-      const response = await fetch(GOOGLE_SHEET_CSV_URL, {
-        method: 'GET',
-        headers: { 'Cache-Control': 'no-cache' },
-        cache: 'no-store'
-      })
+      // Usar múltiples URLs de respaldo para diferentes formatos
+      const SHEET_URLS = [
+        // URL principal CSV
+        GOOGLE_SHEET_CSV_URL,
+        // URL alternativa usando exportFormat
+        GOOGLE_SHEET_CSV_URL.replace('export?format=csv', 'export?exportFormat=csv'),
+        // URL usando el endpoint gviz (más compatible)
+        GOOGLE_SHEET_CSV_URL.replace('/export?format=csv&gid=0', '/gviz/tq?tqx=out:csv&sheet=0')
+      ]
+
+      let lastError = null
       
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      
-      const csvText = await response.text()
-      if (!csvText) throw new Error('El archivo CSV está vacío')
-      
-      const parsedSchedules = parseCSV(csvText)
-      
-      // Combinar con datos locales (si existen)
-      const localSchedules = localStorage.getItem("schoolSchedules")
-      let allSchedules = [...parsedSchedules]
-      
-      if (localSchedules) {
+      for (const url of SHEET_URLS) {
         try {
-          const localParsed = JSON.parse(localSchedules)
-          // Evitar duplicados
-          localParsed.forEach((localEntry: ScheduleEntry) => {
-            if (!parsedSchedules.some(e => 
-              e.grade === localEntry.grade && 
-              e.day === localEntry.day && 
-              e.time === localEntry.time &&
-              e.subject === localEntry.subject
-            )) {
-              allSchedules.push(localEntry)
-            }
+          console.log(`Intentando cargar desde: ${url}`)
+          
+          const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors',
+            headers: {
+              'Accept': 'text/csv, text/plain, */*',
+              'Cache-Control': 'no-cache'
+            },
+            // Añadir timestamp para evitar cache
+            cache: 'no-store'
           })
-        } catch (e) {
-          console.error("Error al parsear datos locales:", e)
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+          
+          const csvText = await response.text()
+          
+          // Verificar que el CSV no esté vacío
+          if (!csvText || csvText.trim().length === 0) {
+            throw new Error('El archivo CSV está vacío')
+          }
+          
+          // Verificar que tenga contenido válido (al menos una línea con datos)
+          const lines = csvText.split('\n').filter(line => line.trim())
+          if (lines.length < 2) {
+            throw new Error('El CSV no contiene datos suficientes')
+          }
+          
+          const parsedSchedules = parseCSV(csvText)
+          
+          if (parsedSchedules.length > 0) {
+            setSchedules(parsedSchedules)
+            
+            // Extraer grados únicos
+            const grades = [...new Set(parsedSchedules.map((s: ScheduleEntry) => s.grade))]
+            setAvailableGrades(grades)
+            
+            if (grades.length > 0 && !selectedGrade) {
+              setSelectedGrade(grades[0])
+            }
+            
+            setLastUpdated(new Date())
+            
+            // Guardar en localStorage como respaldo (sin usar localStorage en artifacts)
+            try {
+              const dataToSave = JSON.stringify({
+                schedules: parsedSchedules,
+                timestamp: new Date().toISOString(),
+                source: 'google_sheets'
+              })
+              // En un entorno real, aquí usarías localStorage.setItem("schoolSchedules", dataToSave)
+              console.log("Datos que se guardarían en localStorage:", dataToSave.substring(0, 200) + "...")
+            } catch (storageError) {
+              console.warn("No se pudo guardar en localStorage:", storageError)
+            }
+            
+            console.log(`Datos cargados exitosamente desde: ${url}`)
+            return // Salir del bucle si fue exitoso
+            
+          } else {
+            throw new Error("No se encontraron datos válidos en la hoja de cálculo")
+          }
+          
+        } catch (urlError) {
+          console.warn(`Error con URL ${url}:`, urlError)
+          lastError = urlError
+          continue // Probar siguiente URL
         }
       }
       
-      setSchedules(allSchedules)
-      
-      // Actualizar listas de grados y materias
-      const uniqueGrades = [...new Set(allSchedules.map(s => s.grade))].sort()
-      setGrades(uniqueGrades)
-      if (uniqueGrades.length > 0 && !selectedGrade) {
-        setSelectedGrade(uniqueGrades[0])
-      }
-      
-      const uniqueSubjects = [...new Set(allSchedules.map(s => s.subject))].sort()
-      setAvailableSubjects(uniqueSubjects)
-      
-      setLastUpdated(new Date())
-      
-      setMessage({
-        type: "success",
-        text: `Datos cargados desde Google Sheets (${parsedSchedules.length} entradas)`
-      })
+      // Si llegamos aquí, todas las URLs fallaron
+      throw lastError || new Error("No se pudo cargar desde ninguna URL")
       
     } catch (err) {
       console.error("Error loading from Google Sheets:", err)
-      setMessage({
-        type: "error",
-        text: "Error al cargar desde Google Sheets. Usando datos locales."
-      })
-      // Cargar solo datos locales si falla
-      loadSchedules()
+      
+      // Mensajes de error más específicos
+      let errorMessage = "Error desconocido"
+      if (err instanceof Error) {
+        if (err.message.includes('400')) {
+          errorMessage = "Error 400: Verifica que la hoja de Google Sheets sea pública y el enlace sea correcto"
+        } else if (err.message.includes('403')) {
+          errorMessage = "Error 403: Sin permisos para acceder a la hoja. Asegúrate de que sea pública"
+        } else if (err.message.includes('404')) {
+          errorMessage = "Error 404: No se encontró la hoja. Verifica el ID del documento"
+        } else if (err.message.includes('CORS')) {
+          errorMessage = "Error de CORS: Problema de configuración del navegador"
+        } else {
+          errorMessage = err.message
+        }
+      }
+      
+      setError(errorMessage)
+      
+      // Intentar cargar datos de respaldo (simulado para el artifact)
+      console.log("En un entorno real, aquí se cargarían los datos de respaldo desde localStorage")
+      
+      // Datos de ejemplo para que la aplicación funcione
+      const exampleSchedules: ScheduleEntry[] = [
+        {
+          id: "example1",
+          grade: "1° Año",
+          day: "Lunes",
+          time: "07:40 - 08:40",
+          subject: "Matemática",
+          teacher: "Prof. García",
+          type: "teoria",
+          teacherType: "titular"
+        },
+        {
+          id: "example2",
+          grade: "1° Año",
+          day: "Lunes",
+          time: "08:40 - 09:40",
+          subject: "Lengua",
+          teacher: "Prof. López",
+          type: "teoria",
+          teacherType: "titular"
+        }
+      ]
+      
+      setSchedules(exampleSchedules)
+      const grades = [...new Set(exampleSchedules.map(s => s.grade))]
+      setAvailableGrades(grades)
+      if (grades.length > 0 && !selectedGrade) {
+        setSelectedGrade(grades[0])
+      }
+      
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadSchedules = () => {
-    const savedSchedules = localStorage.getItem("schoolSchedules")
-    if (savedSchedules) {
-      try {
-        const parsed = JSON.parse(savedSchedules)
-        const schedulesWithIds = parsed.map((entry: any) => ({
-          ...entry,
-          id: entry.id || generateId(),
-          type: entry.type || "teoria",
-          teacherType: entry.teacherType || "titular"
-        }))
-        setSchedules(schedulesWithIds)
-
-        const uniqueGrades = [...new Set(schedulesWithIds.map((s: ScheduleEntry) => s.grade))].sort()
-        setGrades(uniqueGrades)
-        if (uniqueGrades.length > 0 && selectedGrade === "Todos los cursos") {
-          setSelectedGrade(uniqueGrades[0])
-        }
-
-        const uniqueSubjects = [...new Set(schedulesWithIds.map((s: ScheduleEntry) => s.subject))].sort()
-        setAvailableSubjects(uniqueSubjects)
-      } catch (error) {
-        console.error("Error parsing schedules:", error)
-        setSchedules([])
-      }
-    } else {
-      setSchedules([])
-    }
-  }
-
-  const loadCustomTimes = () => {
-    const savedTimes = localStorage.getItem("schoolTimes")
-    if (savedTimes) {
-      try {
-        const parsed = JSON.parse(savedTimes)
-        setCustomTimes(parsed)
-      } catch (error) {
-        console.error("Error parsing times:", error)
-        setCustomTimes(DEFAULT_TIMES)
-      }
-    } else {
-      setCustomTimes(DEFAULT_TIMES)
     }
   }
 
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem("adminAuthenticated")
-    const loginTime = localStorage.getItem("adminLoginTime")
-
-    if (!isAuthenticated || !loginTime) {
-      router.push("/admin/login")
-      return
-    }
-
-    const now = Date.now()
-    const loginTimestamp = Number.parseInt(loginTime)
-    const twentyFourHours = 24 * 60 * 60 * 1000
-
-    if (now - loginTimestamp > twentyFourHours) {
-      localStorage.removeItem("adminAuthenticated")
-      localStorage.removeItem("adminLoginTime")
-      router.push("/admin/login")
-      return
-    }
-
+    // Cargar horarios personalizados (simulado)
+    setCustomTimes(DEFAULT_TIMES)
+    
+    // Cargar datos desde Google Sheets
     loadFromGoogleSheets()
-    loadCustomTimes()
-  }, [router])
-
-  const handleLogout = () => {
-    localStorage.removeItem("adminAuthenticated")
-    localStorage.removeItem("adminLoginTime")
-    router.push("/admin/login")
-  }
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0]
-    if (selectedFile) {
-      setFile(selectedFile)
-      setMessage(null)
-    }
-  }
-
-  const processExcelFile = async (file: File): Promise<ScheduleEntry[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer)
-          const workbook = XLSX.read(data, { type: "array" })
-          const sheetName = workbook.SheetNames[0]
-          const worksheet = workbook.Sheets[sheetName]
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-
-          const scheduleEntries: ScheduleEntry[] = []
-
-          for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i] as any[]
-            if (row.length >= 5 && row[0]) {
-              const teacherTypeValue = String(row[6] || "").trim().toLowerCase()
-              let teacherType: "titular" | "suplente" | "provisional" = "titular"
-
-              if (teacherTypeValue === "suplente") teacherType = "suplente"
-              else if (teacherTypeValue === "provisional") teacherType = "provisional"
-
-              scheduleEntries.push({
-                id: generateId(),
-                grade: String(row[0] || "").trim(),
-                day: String(row[1] || "").trim(),
-                time: String(row[2] || "").trim(),
-                subject: String(row[3] || "").trim(),
-                teacher: String(row[4] || "").trim(),
-                type: (String(row[5] || "").trim().toLowerCase() === "taller" ? "taller" : "teoria",
-                teacherType,
-              })
-            }
-          }
-
-          resolve(scheduleEntries)
-        } catch (error) {
-          reject(error)
-        }
-      }
-      reader.onerror = () => reject(new Error("Error al leer el archivo"))
-      reader.readAsArrayBuffer(file)
-    })
-  }
-
-  const handleUpload = async () => {
-    if (!file) {
-      setMessage({ type: "error", text: "Por favor selecciona un archivo Excel" })
-      return
-    }
-
-    setLoading(true)
-    setMessage(null)
-
-    try {
-      const processedSchedules = await processExcelFile(file)
-
-      if (processedSchedules.length === 0) {
-        setMessage({ type: "error", text: "No se encontraron datos válidos en el archivo Excel" })
-        return
-      }
-
-      localStorage.setItem("schoolSchedules", JSON.stringify(processedSchedules))
-      setSchedules(processedSchedules)
-
-      const uniqueGrades = [...new Set(processedSchedules.map((s) => s.grade))].sort()
-      setGrades(uniqueGrades)
-      if (uniqueGrades.length > 0 && selectedGrade === "Todos los cursos") {
-        setSelectedGrade(uniqueGrades[0])
-      }
-
-      const uniqueSubjects = [...new Set(processedSchedules.map((s) => s.subject))].sort()
-      setAvailableSubjects(uniqueSubjects)
-
-      setMessage({
-        type: "success",
-        text: `Horarios cargados exitosamente. Se procesaron ${processedSchedules.length} entradas.`,
-      })
-
-      setFile(null)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
-      }
-    } catch (error) {
-      console.error("Error processing file:", error)
-      setMessage({
-        type: "error",
-        text: "Error al procesar el archivo. Verifica que sea un archivo Excel válido con el formato correcto.",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const downloadTemplate = () => {
-    const templateData = [
-      ["Curso", "Día", "Horario", "Materia", "Profesor", "Tipo", "Tipo Docente"],
-      ["1° A", "Lunes", "08:00 - 08:45", "Matemáticas", "Prof. García", "teoria", "titular"],
-      ["1° A", "Lunes", "08:45 - 09:30", "Taller de Electrónica", "Prof. Martínez", "taller", "suplente"],
-      ["1° A", "Martes", "08:00 - 08:45", "Historia", "Prof. Rodríguez", "teoria", "provisional"],
-      ["2° B", "Lunes", "08:00 - 08:45", "Taller de Mecánica", "Prof. Fernández", "taller", "titular"],
-    ]
-
-    const ws = XLSX.utils.aoa_to_sheet(templateData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Horarios")
-    XLSX.writeFile(wb, "plantilla_horarios.xlsx")
-  }
-
-  const handleAddEntry = () => {
-    if (!newEntry.grade || !newEntry.day || !newEntry.time || !newEntry.subject) {
-      setMessage({
-        type: "error",
-        text: "Por favor completa todos los campos obligatorios (Curso, Día, Horario y Materia)",
-      })
-      return
-    }
-
-    const entry: ScheduleEntry = {
-      id: generateId(),
-      grade: newEntry.grade,
-      day: newEntry.day,
-      time: newEntry.time,
-      subject: newEntry.subject,
-      teacher: newEntry.teacher || "",
-      type: newEntry.type || "teoria",
-      teacherType: newEntry.teacherType || "titular",
-    }
-
-    const updatedSchedules = [...schedules, entry]
-    setSchedules(updatedSchedules)
-    localStorage.setItem("schoolSchedules", JSON.stringify(updatedSchedules))
-
-    if (!grades.includes(entry.grade)) {
-      const updatedGrades = [...grades, entry.grade].sort()
-      setGrades(updatedGrades)
-      if (selectedGrade === "Todos los cursos") {
-        setSelectedGrade(entry.grade)
-      }
-    }
-
-    if (!availableSubjects.includes(entry.subject)) {
-      const updatedSubjects = [...availableSubjects, entry.subject].sort()
-      setAvailableSubjects(updatedSubjects)
-    }
-
-    setNewEntry({
-      grade: entry.grade,
-      day: "",
-      time: "",
-      subject: "",
-      teacher: "",
-      type: "teoria",
-      teacherType: "titular",
-    })
-
-    setMessage({
-      type: "success",
-      text: "Horario agregado correctamente",
-    })
-
-    setTimeout(() => {
-      setMessage(null)
-    }, 3000)
-  }
-
-  const handleEditEntry = (entry: ScheduleEntry) => {
-    setEditMode(entry.id)
-    setEditingEntry({ ...entry })
-  }
-
-  const handleSaveEdit = () => {
-    if (!editingEntry) return
-
-    const updatedSchedules = schedules.map((entry) => (entry.id === editingEntry.id ? { ...editingEntry } : entry))
-
-    setSchedules(updatedSchedules)
-    localStorage.setItem("schoolSchedules", JSON.stringify(updatedSchedules))
-    setEditMode(null)
-    setEditingEntry(null)
-
-    const uniqueSubjects = [...new Set(updatedSchedules.map((s) => s.subject))].sort()
-    setAvailableSubjects(uniqueSubjects)
-
-    setMessage({
-      type: "success",
-      text: "Horario actualizado correctamente",
-    })
-
-    setTimeout(() => {
-      setMessage(null)
-    }, 3000)
-  }
-
-  const handleCancelEdit = () => {
-    setEditMode(null)
-    setEditingEntry(null)
-  }
-
-  const handleDeleteEntry = (id: string) => {
-    if (confirm("¿Estás seguro de que deseas eliminar este horario?")) {
-      const updatedSchedules = schedules.filter((entry) => entry.id !== id)
-      setSchedules(updatedSchedules)
-      localStorage.setItem("schoolSchedules", JSON.stringify(updatedSchedules))
-
-      const remainingGrades = [...new Set(updatedSchedules.map((s) => s.grade))].sort()
-      setGrades(remainingGrades)
-      if (remainingGrades.length > 0 && !remainingGrades.includes(selectedGrade)) {
-        setSelectedGrade(remainingGrades[0])
-      }
-
-      const uniqueSubjects = [...new Set(updatedSchedules.map((s) => s.subject))].sort()
-      setAvailableSubjects(uniqueSubjects)
-
-      setMessage({
-        type: "success",
-        text: "Horario eliminado correctamente",
-      })
-
-      setTimeout(() => {
-        setMessage(null)
-      }, 3000)
-    }
-  }
-
-  const handleExportToExcel = () => {
-    const exportData = [
-      ["Curso", "Día", "Horario", "Materia", "Profesor", "Tipo", "Tipo Docente"],
-      ...schedules.map((entry) => [
-        entry.grade,
-        entry.day,
-        entry.time,
-        entry.subject,
-        entry.teacher,
-        entry.type,
-        entry.teacherType,
-      ]),
-    ]
-
-    const ws = XLSX.utils.aoa_to_sheet(exportData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Horarios")
-    XLSX.writeFile(wb, "horarios_escuela.xlsx")
-  }
-
-  const handleAddTime = () => {
-    if (!newTime.trim()) {
-      setMessage({
-        type: "error",
-        text: "Por favor ingresa un horario válido",
-      })
-      return
-    }
-
-    if (customTimes.includes(newTime.trim())) {
-      setMessage({
-        type: "error",
-        text: "Este horario ya existe",
-      })
-      return
-    }
-
-    const updatedTimes = [...customTimes, newTime.trim()].sort()
-    setCustomTimes(updatedTimes)
-    localStorage.setItem("schoolTimes", JSON.stringify(updatedTimes))
-    setNewTime("")
-
-    setMessage({
-      type: "success",
-      text: "Horario agregado correctamente",
-    })
-
-    setTimeout(() => {
-      setMessage(null)
-    }, 3000)
-  }
-
-  const handleEditTime = (index: number) => {
-    setEditingTime({ index, value: customTimes[index] })
-  }
-
-  const handleSaveTimeEdit = () => {
-    if (!editingTime || !editingTime.value.trim()) return
-
-    const updatedTimes = [...customTimes]
-    updatedTimes[editingTime.index] = editingTime.value.trim()
-    updatedTimes.sort()
-
-    setCustomTimes(updatedTimes)
-    localStorage.setItem("schoolTimes", JSON.stringify(updatedTimes))
-    setEditingTime(null)
-
-    setMessage({
-      type: "success",
-      text: "Horario actualizado correctamente",
-    })
-
-    setTimeout(() => {
-      setMessage(null)
-    }, 3000)
-  }
-
-  const handleCancelTimeEdit = () => {
-    setEditingTime(null)
-  }
-
-  const handleDeleteTime = (index: number) => {
-    const timeToDelete = customTimes[index]
-    const schedulesUsingTime = schedules.filter((s) => s.time === timeToDelete)
-
-    if (schedulesUsingTime.length > 0) {
-      if (
-        !confirm(
-          `Este horario está siendo usado por ${schedulesUsingTime.length} materia(s). ¿Estás seguro de que deseas eliminarlo? Esto también eliminará las materias asociadas.`,
-        )
-      ) {
-        return
-      }
-
-      const updatedSchedules = schedules.filter((s) => s.time !== timeToDelete)
-      setSchedules(updatedSchedules)
-      localStorage.setItem("schoolSchedules", JSON.stringify(updatedSchedules))
-    }
-
-    const updatedTimes = customTimes.filter((_, i) => i !== index)
-    setCustomTimes(updatedTimes)
-    localStorage.setItem("schoolTimes", JSON.stringify(updatedTimes))
-
-    setMessage({
-      type: "success",
-      text: "Horario eliminado correctamente",
-    })
-
-    setTimeout(() => {
-      setMessage(null)
-    }, 3000)
-  }
-
-  const resetToDefaultTimes = () => {
-    if (
-      confirm(
-        "¿Estás seguro de que deseas restaurar los horarios por defecto? Esto eliminará todos los horarios personalizados.",
-      )
-    ) {
-      setCustomTimes(DEFAULT_TIMES)
-      localStorage.setItem("schoolTimes", JSON.stringify(DEFAULT_TIMES))
-
-      setMessage({
-        type: "success",
-        text: "Horarios restaurados a los valores por defecto",
-      })
-
-      setTimeout(() => {
-        setMessage(null)
-      }, 3000)
-    }
-  }
-
-  const getTeacherTypeStyles = (teacherType: "titular" | "suplente" | "provisional") => {
-    switch (teacherType) {
-      case "titular":
-        return {
-          background: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
-          border: "border-blue-200",
-          text: "text-white",
-          badge: "bg-blue-100 text-blue-800",
-        }
-      case "suplente":
-        return {
-          background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-          border: "border-emerald-200",
-          text: "text-white",
-          badge: "bg-emerald-100 text-emerald-800",
-        }
-      case "provisional":
-        return {
-          background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
-          border: "border-red-200",
-          text: "text-white",
-          badge: "bg-red-100 text-red-800",
-        }
-      default:
-        return {
-          background: "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)",
-          border: "border-gray-200",
-          text: "text-white",
-          badge: "bg-gray-100 text-gray-800",
-        }
-    }
-  }
+  }, [])
 
   const getScheduleForGradeAndDay = (grade: string, day: string, time: string) => {
-    return schedules.filter((s) => s.grade === grade && s.day === day && s.time === time)
+    return schedules.find((s) => s.grade === grade && s.day === day && s.time === time)
   }
 
-  const getSchedulesBySubject = (subject: string) => {
-    return schedules.filter((s) => s.subject === subject)
+  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
+    // Verificar si es hora de recreo
+    if (RECREO_TIMES.includes(time)) {
+      return {
+        background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+        border: "border-amber-200",
+        text: "text-amber-900",
+        icon: null,
+      }
+    }
+
+    if (!entry) {
+      return {
+        background: "bg-gray-50",
+        border: "border-gray-200",
+        text: "text-gray-400",
+        icon: null,
+      }
+    }
+
+    if (entry.type === "teoria") {
+      return {
+        background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+        border: "border-emerald-200",
+        text: "text-white",
+        icon: <BookOpen className="h-3 w-3" />,
+      }
+    } else {
+      return {
+        background: "linear-gradient(135deg, #34d399 0%, #10b981 100%)",
+        border: "border-green-200",
+        text: "text-white",
+        icon: <Wrench className="h-3 w-3" />,
+      }
+    }
   }
 
-  const filteredSchedules =
-    selectedGrade !== "Todos los cursos" ? schedules.filter((entry) => entry.grade === selectedGrade) : schedules
-
-  const filteredBySubject =
-    selectedSubject !== "Todas las materias"
-      ? filteredSchedules.filter((entry) => entry.subject === selectedSubject)
-      : filteredSchedules
+  const filteredSchedules = schedules.filter((s) => s.grade === selectedGrade)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -715,29 +375,31 @@ export default function AdminPage() {
                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/20 to-blue-600/20 rounded-full blur-xl"></div>
               </div>
               <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
                   ESCUELA TECNICA Nº6
                 </h1>
                 <p className="text-lg font-semibold text-slate-700">"ING. JUAN V. PASSALACQUA"</p>
-                <p className="text-sm text-slate-600">Panel de Administración</p>
+                <p className="text-sm text-slate-600">Horarios Académicos</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <Button
+                onClick={loadFromGoogleSheets}
+                disabled={loading}
                 variant="outline"
-                onClick={handleLogout}
-                className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-red-200 hover:bg-red-50 hover:border-red-300"
+                size="sm"
+                className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
               >
-                <LogOut className="h-4 w-4" />
-                Cerrar Sesión
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Actualizando...' : 'Actualizar'}
               </Button>
-              <Link href="/">
+              <Link href="/admin/login">
                 <Button
                   variant="outline"
-                  className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300"
+                  className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200"
                 >
-                  <ArrowLeft className="h-4 w-4" />
-                  Volver a Horarios
+                  <Settings className="h-4 w-4" />
+                  Administración
                 </Button>
               </Link>
             </div>
@@ -746,59 +408,191 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Mostrar estado de carga y errores */}
+        {error && (
+          <Card className="mb-6 bg-red-50 border-red-200">
+            <CardContent className="pt-6">
+              <div className="text-red-700">
+                <strong>Error:</strong> {error}
+                <br />
+                <small className="text-red-600">
+                  Instrucciones para solucionar:
+                  <br />
+                  1. Verifica que tu Google Sheet sea público (Compartir → "Cualquier persona con el enlaceenlace")
+                  <br />
+                  2. Asegúrate de que la URL esté bien formada
+                  <br />
+                  3. Verifica que el ID de la hoja sea correcto
+                </small>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Mostrar última actualización */}
         {lastUpdated && (
-          <div className="mb-4 text-sm text-slate-600 bg-green-50 p-2 rounded border border-green-200 flex justify-between items-center">
-            <span>✅ Última actualización: {lastUpdated.toLocaleString()}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={loadFromGoogleSheets}
-              disabled={loading}
-              className="flex items-center gap-1"
-            >
-              <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Actualizando...' : 'Actualizar'}
-            </Button>
+          <div className="mb-4 text-sm text-slate-600 bg-green-50 p-2 rounded border border-green-200">
+            ✅ Última actualización exitosa: {lastUpdated.toLocaleString()}
           </div>
         )}
 
-        <Tabs defaultValue="view" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-8 bg-white/70 backdrop-blur-sm">
-            <TabsTrigger
-              value="view"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-blue-600 data-[state=active]:text-white"
-            >
-              Vista Administrador
-            </TabsTrigger>
-            <TabsTrigger
-              value="subject"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-blue-600 data-[state=active]:text-white"
-            >
-              Por Materia
-            </TabsTrigger>
-            <TabsTrigger
-              value="edit"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-blue-600 data-[state=active]:text-white"
-            >
-              Editar Horarios
-            </TabsTrigger>
-            <TabsTrigger
-              value="import"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-blue-600 data-[state=active]:text-white"
-            >
-              Importar/Exportar
-            </TabsTrigger>
-            <TabsTrigger
-              value="times"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-blue-600 data-[state=active]:text-white"
-            >
-              Gestionar Horarios
-            </TabsTrigger>
-          </TabsList>
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="p-2 bg-gradient-to-br from-emerald-500 to-blue-600 rounded-lg shadow-lg">
+              <Calendar className="h-6 w-6 text-white" />
+            </div>
+            <h2 className="text-xl font-semibold text-slate-800">Horarios por Curso</h2>
+          </div>
 
-          {/* Resto del código de las pestañas se mantiene igual */}
-          {/* ... (el resto del código de las pestañas permanece igual) ... */}
-        </Tabs>
+          {availableGrades.length > 0 ? (
+            <div className="mb-6">
+              <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                <SelectTrigger className="w-48 bg-white/70 backdrop-blur-sm border-slate-200 hover:bg-white/90 transition-all duration-200">
+                  <SelectValue placeholder="Seleccionar curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableGrades.map((grade) => (
+                    <SelectItem key={grade} value={grade}>
+                      {grade}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <Card className="mb-6 bg-white/70 backdrop-blur-sm border-slate-200 shadow-lg">
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <div className="p-4 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full w-fit mx-auto mb-4">
+                    <Clock className="h-12 w-12 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-slate-900 mb-2">
+                    {loading ? 'Cargando horarios...' : 'No hay horarios cargados'}
+                  </h3>
+                  <p className="text-slate-600 mb-4">
+                    {loading 
+                      ? 'Obteniendo datos desde Google Sheets...'
+                      : 'Verifica que la hoja de Google Sheets esté configurada correctamente y sea pública.'
+                    }
+                  </p>
+                  {!loading && (
+                    <div className="space-y-2">
+                      <Button 
+                        onClick={loadFromGoogleSheets}
+                        className="bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-600 hover:to-blue-700 text-white shadow-lg mr-2"
+                      >
+                        Intentar Cargar Datos
+                      </Button>
+                      <Link href="/admin">
+                        <Button variant="outline">
+                          Ir a Administración
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {selectedGrade && filteredSchedules.length > 0 && (
+          <Card className="bg-white/70 backdrop-blur-sm border-slate-200 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-emerald-50 to-blue-50 border-b border-slate-200">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <div className="p-2 bg-gradient-to-br from-emerald-500 to-blue-600 rounded-lg">
+                  <GraduationCap className="h-5 w-5 text-white" />
+                </div>
+                Horario - {selectedGrade}
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                Horario semanal del curso seleccionado (Datos desde Google Sheets)
+                <div className="flex items-center gap-4 mt-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-emerald-500 to-emerald-600"></div>
+                    <BookOpen className="h-3 w-3" />
+                    <span>Teoría</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-green-400 to-emerald-500"></div>
+                    <Wrench className="h-3 w-3" />
+                    <span>Taller</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-amber-400 to-amber-500"></div>
+                    <span>Recreo</span>
+                  </div>
+                </div>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left p-4 font-semibold text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 min-w-[120px]">
+                        Horario
+                      </th>
+                      {DAYS.map((day) => (
+                        <th
+                          key={day}
+                          className="text-left p-4 font-semibold text-slate-700 bg-gradient-to-r from-slate-50 to-slate-100 min-w-[200px]"
+                        >
+                          {day}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customTimes.map((time, index) => (
+                      <tr key={time} className={`border-b border-slate-100 ${index % 2 === 0 ? "bg-white/50" : ""}`}>
+                        <td className="p-4 font-medium text-slate-700 bg-gradient-to-r from-slate-50/50 to-white/50">
+                          {time}
+                        </td>
+                        {DAYS.map((day) => {
+                          const entry = getScheduleForGradeAndDay(selectedGrade, day, time)
+                          const styles = getSubjectStyles(entry, time)
+                          const isRecreo = RECREO_TIMES.includes(time)
+
+                          return (
+                            <td key={`${day}-${time}`} className="p-2">
+                              {entry || isRecreo ? (
+                                <div
+                                  className={`p-3 rounded-lg shadow-sm border-2 ${styles.border} transition-all duration-200 hover:shadow-md`}
+                                  style={{
+                                    background: styles.background,
+                                  }}
+                                >
+                                  {isRecreo ? (
+                                    <div className="text-center">
+                                      <div className="font-bold text-amber-900 text-sm">RECREO</div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      <div className={`font-semibold text-sm ${styles.text} flex items-center gap-1`}>
+                                        {styles.icon}
+                                        {entry!.subject}
+                                      </div>
+                                      <div className={`text-xs ${styles.text} opacity-90`}>{entry!.teacher}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="p-3 rounded-lg bg-slate-50/50 border-2 border-slate-100">
+                                  <div className="text-slate-300 text-center">-</div>
+                                </div>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   )
