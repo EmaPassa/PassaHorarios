@@ -29,6 +29,7 @@ import {
   Eye,
   Users,
   GraduationCap,
+  RefreshCw,
 } from "lucide-react"
 import Link from "next/link"
 import * as XLSX from "xlsx"
@@ -51,7 +52,7 @@ const DEFAULT_TIMES = [
   "08:40 - 09:40",
   "09:40 - 09:50", // Recreo
   "09:50 - 10:50",
-  "10:50 - 11:50", 
+  "10:50 - 11:50",
   "11:55 - 12:55",
   "13:00 - 14:00",
   "14:00 - 15:00",
@@ -117,11 +118,11 @@ export default function AdminPage() {
     }
 
     // Cargar horarios existentes y horarios personalizados
-    loadSchedules()
+    loadSchedules() // Ahora es async pero no necesitamos await aquí
     loadCustomTimes()
   }, [router])
 
-  const loadSchedules = () => {
+  const loadSchedules = async () => {
     const savedSchedules = localStorage.getItem("schoolSchedules")
     if (savedSchedules) {
       try {
@@ -131,7 +132,7 @@ export default function AdminPage() {
           ...entry,
           id: entry.id || generateId(),
           type: entry.type || "teoria",
-          teacherType: entry.teacherType || "titular", // Valor por defecto para datos existentes
+          teacherType: entry.teacherType || "titular",
         }))
         setSchedules(schedulesWithIds)
 
@@ -147,10 +148,215 @@ export default function AdminPage() {
         setAvailableSubjects(uniqueSubjects)
       } catch (error) {
         console.error("Error parsing schedules:", error)
-        setSchedules([])
+        // Si hay error, intentar cargar desde Google Sheets
+        await loadFromGoogleSheets()
       }
     } else {
-      setSchedules([])
+      // Si no hay datos locales, intentar cargar desde Google Sheets
+      await loadFromGoogleSheets()
+    }
+  }
+
+  // Función para cargar desde Google Sheets (igual que en el código original)
+  const loadFromGoogleSheets = async () => {
+    setLoading(true)
+    setMessage(null)
+
+    try {
+      const GOOGLE_SHEET_CSV_URL =
+        "https://docs.google.com/spreadsheets/d/1C1st8qO7UEYZPQZUR39g6mR8GR-BrEWr/export?format=csv&gid=0"
+
+      const SHEET_URLS = [
+        GOOGLE_SHEET_CSV_URL,
+        GOOGLE_SHEET_CSV_URL.replace("export?format=csv", "export?exportFormat=csv"),
+        GOOGLE_SHEET_CSV_URL.replace("/export?format=csv&gid=0", "/gviz/tq?tqx=out:csv&sheet=0"),
+      ]
+
+      let lastError = null
+
+      for (const url of SHEET_URLS) {
+        try {
+          console.log(`Intentando cargar desde: ${url}`)
+
+          const response = await fetch(url, {
+            method: "GET",
+            mode: "cors",
+            headers: {
+              Accept: "text/csv, text/plain, */*",
+              "Cache-Control": "no-cache",
+            },
+            cache: "no-store",
+          })
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
+
+          const csvText = await response.text()
+
+          if (!csvText || csvText.trim().length === 0) {
+            throw new Error("El archivo CSV está vacío")
+          }
+
+          const lines = csvText.split("\n").filter((line) => line.trim())
+          if (lines.length < 2) {
+            throw new Error("El CSV no contiene datos suficientes")
+          }
+
+          const parsedSchedules = parseCSVFromGoogleSheets(csvText)
+
+          if (parsedSchedules.length > 0) {
+            setSchedules(parsedSchedules)
+
+            // Guardar en localStorage
+            localStorage.setItem("schoolSchedules", JSON.stringify(parsedSchedules))
+
+            // Extraer grados únicos
+            const uniqueGrades = [...new Set(parsedSchedules.map((s: ScheduleEntry) => s.grade))].sort()
+            setGrades(uniqueGrades)
+            if (uniqueGrades.length > 0 && selectedGrade === "Todos los cursos") {
+              setSelectedGrade(uniqueGrades[0])
+            }
+
+            // Extraer materias únicas
+            const uniqueSubjects = [...new Set(parsedSchedules.map((s: ScheduleEntry) => s.subject))].sort()
+            setAvailableSubjects(uniqueSubjects)
+
+            setMessage({
+              type: "success",
+              text: `Datos cargados desde Google Sheets. Se procesaron ${parsedSchedules.length} entradas.`,
+            })
+
+            console.log(`Datos cargados exitosamente desde: ${url}`)
+            return
+          } else {
+            throw new Error("No se encontraron datos válidos en la hoja de cálculo")
+          }
+        } catch (urlError) {
+          console.warn(`Error con URL ${url}:`, urlError)
+          lastError = urlError
+          continue
+        }
+      }
+
+      throw lastError || new Error("No se pudo cargar desde ninguna URL")
+    } catch (err) {
+      console.error("Error loading from Google Sheets:", err)
+
+      let errorMessage = "Error desconocido"
+      if (err instanceof Error) {
+        if (err.message.includes("400")) {
+          errorMessage = "Error 400: Verifica que la hoja de Google Sheets sea pública y el enlace sea correcto"
+        } else if (err.message.includes("403")) {
+          errorMessage = "Error 403: Sin permisos para acceder a la hoja. Asegúrate de que sea pública"
+        } else if (err.message.includes("404")) {
+          errorMessage = "Error 404: No se encontró la hoja. Verifica el ID del documento"
+        } else if (err.message.includes("CORS")) {
+          errorMessage = "Error de CORS: Problema de configuración del navegador"
+        } else {
+          errorMessage = err.message
+        }
+      }
+
+      setMessage({
+        type: "error",
+        text: `Error al cargar desde Google Sheets: ${errorMessage}`,
+      })
+
+      // Si no hay datos locales y falla Google Sheets, inicializar vacío
+      if (!localStorage.getItem("schoolSchedules")) {
+        setSchedules([])
+        setGrades([])
+        setAvailableSubjects([])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Función para parsear CSV de Google Sheets
+  const parseCSVFromGoogleSheets = (csvText: string): ScheduleEntry[] => {
+    try {
+      const lines = csvText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line)
+
+      if (lines.length === 0) {
+        throw new Error("CSV vacío")
+      }
+
+      const scheduleEntries: ScheduleEntry[] = []
+
+      // Función auxiliar para parsear líneas CSV correctamente
+      const parseCSVLine = (line: string): string[] => {
+        const result: string[] = []
+        let current = ""
+        let inQuotes = false
+
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i]
+
+          if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+              current += '"'
+              i++
+            } else {
+              inQuotes = !inQuotes
+            }
+          } else if (char === "," && !inQuotes) {
+            result.push(current.trim())
+            current = ""
+          } else {
+            current += char
+          }
+        }
+
+        result.push(current.trim())
+        return result.map((field) => field.replace(/^"(.*)"$/, "$1"))
+      }
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i]
+        if (!line) continue
+
+        const values = parseCSVLine(line)
+
+        if (values.length >= 6) {
+          const teacherTypeValue = String(values[6] || "")
+            .trim()
+            .toLowerCase()
+          let teacherType: "titular" | "suplente" | "provisional" = "titular"
+
+          if (teacherTypeValue === "suplente") teacherType = "suplente"
+          else if (teacherTypeValue === "provisional") teacherType = "provisional"
+
+          const entry: ScheduleEntry = {
+            id: generateId(),
+            grade: String(values[0] || "").trim(),
+            day: String(values[1] || "").trim(),
+            time: String(values[2] || "").trim(),
+            subject: String(values[3] || "").trim(),
+            teacher: String(values[4] || "").trim(),
+            type: (String(values[5] || "")
+              .trim()
+              .toLowerCase() === "taller"
+              ? "taller"
+              : "teoria") as "teoria" | "taller",
+            teacherType,
+          }
+
+          if (entry.grade && entry.day && entry.time && entry.subject) {
+            scheduleEntries.push(entry)
+          }
+        }
+      }
+
+      console.log(`Parseados ${scheduleEntries.length} entradas de horarios desde Google Sheets`)
+      return scheduleEntries
+    } catch (error) {
+      console.error("Error parseando CSV desde Google Sheets:", error)
+      throw new Error(`Error al procesar los datos: ${error instanceof Error ? error.message : "Error desconocido"}`)
     }
   }
 
@@ -1064,7 +1270,7 @@ export default function AdminPage() {
                                     <td className="border-b px-4 py-2">
                                       <Select
                                         value={editingEntry?.day || ""}
-                                        onValueChange={(value) => setEditingEntry({ ...editingEntry!, day: value })}
+                                        onChange={(value) => setEditingEntry({ ...editingEntry!, day: value })}
                                       >
                                         <SelectTrigger className="bg-white/70">
                                           <SelectValue placeholder="Día" />
@@ -1081,7 +1287,7 @@ export default function AdminPage() {
                                     <td className="border-b px-4 py-2">
                                       <Select
                                         value={editingEntry?.time || ""}
-                                        onValueChange={(value) => setEditingEntry({ ...editingEntry!, time: value })}
+                                        onChange={(value) => setEditingEntry({ ...editingEntry!, time: value })}
                                       >
                                         <SelectTrigger className="bg-white/70">
                                           <SelectValue placeholder="Horario" />
@@ -1453,6 +1659,24 @@ export default function AdminPage() {
                     >
                       <Download className="h-4 w-4" />
                       Descargar Plantilla
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={loadFromGoogleSheets}
+                      disabled={loading}
+                      className="flex items-center gap-2 bg-white/70 border-blue-200 hover:bg-blue-50"
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                          Sincronizando...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4" />
+                          Sincronizar con Google Sheets
+                        </>
+                      )}
                     </Button>
                   </div>
 
