@@ -50,7 +50,6 @@ const RECREO_TIMES = [
 ]
 
 // URL de tu Google Sheet en formato CSV
-// Reemplaza SHEET_ID con tu ID real y SHEET_NAME con el nombre de la hoja
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1C1st8qO7UEYZPQZUR39g6mR8GR-BrEWr/export?format=csv&gid=0"
 
 export default function HomePage() {
@@ -230,7 +229,6 @@ export default function HomePage() {
                 timestamp: new Date().toISOString(),
                 source: 'google_sheets'
               })
-              // En un entorno real, aquí usarías localStorage.setItem("schoolSchedules", dataToSave)
               console.log("Datos que se guardarían en localStorage:", dataToSave.substring(0, 200) + "...")
             } catch (storageError) {
               console.warn("No se pudo guardar en localStorage:", storageError)
@@ -322,10 +320,10 @@ export default function HomePage() {
   }, [])
 
   const getScheduleForGradeAndDay = (grade: string, day: string, time: string) => {
-    return schedules.find((s) => s.grade === grade && s.day === day && s.time === time)
+    return schedules.filter((s) => s.grade === grade && s.day === day && s.time === time)
   }
 
-  const getSubjectStyles = (entry: ScheduleEntry | undefined, time: string) => {
+  const getSubjectStyles = (entry: ScheduleEntry, time: string) => {
     // Verificar si es hora de recreo
     if (RECREO_TIMES.includes(time)) {
       return {
@@ -418,7 +416,7 @@ export default function HomePage() {
                 <small className="text-red-600">
                   Instrucciones para solucionar:
                   <br />
-                  1. Verifica que tu Google Sheet sea público (Compartir → "Cualquier persona con el enlaceenlace")
+                  1. Verifica que tu Google Sheet sea público (Compartir → "Cualquier persona con el enlace")
                   <br />
                   2. Asegúrate de que la URL esté bien formada
                   <br />
@@ -550,32 +548,44 @@ export default function HomePage() {
                           {time}
                         </td>
                         {DAYS.map((day) => {
-                          const entry = getScheduleForGradeAndDay(selectedGrade, day, time)
-                          const styles = getSubjectStyles(entry, time)
+                          const entries = getScheduleForGradeAndDay(selectedGrade, day, time)
                           const isRecreo = RECREO_TIMES.includes(time)
 
                           return (
                             <td key={`${day}-${time}`} className="p-2">
-                              {entry || isRecreo ? (
+                              {isRecreo ? (
                                 <div
-                                  className={`p-3 rounded-lg shadow-sm border-2 ${styles.border} transition-all duration-200 hover:shadow-md`}
+                                  className={`p-3 rounded-lg shadow-sm border-2 border-amber-200 transition-all duration-200 hover:shadow-md`}
                                   style={{
-                                    background: styles.background,
+                                    background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
                                   }}
                                 >
-                                  {isRecreo ? (
-                                    <div className="text-center">
-                                      <div className="font-bold text-amber-900 text-sm">RECREO</div>
-                                    </div>
-                                  ) : (
-                                    <div className="space-y-1">
-                                      <div className={`font-semibold text-sm ${styles.text} flex items-center gap-1`}>
-                                        {styles.icon}
-                                        {entry!.subject}
+                                  <div className="text-center">
+                                    <div className="font-bold text-amber-900 text-sm">RECREO</div>
+                                  </div>
+                                </div>
+                              ) : entries.length > 0 ? (
+                                <div className="space-y-2">
+                                  {entries.map((entry) => {
+                                    const styles = getSubjectStyles(entry, time)
+                                    return (
+                                      <div
+                                        key={entry.id}
+                                        className={`p-3 rounded-lg shadow-sm border-2 ${styles.border} transition-all duration-200 hover:shadow-md`}
+                                        style={{
+                                          background: styles.background,
+                                        }}
+                                      >
+                                        <div className="space-y-1">
+                                          <div className={`font-semibold text-sm ${styles.text} flex items-center gap-1`}>
+                                            {styles.icon}
+                                            {entry.subject}
+                                          </div>
+                                          <div className={`text-xs ${styles.text} opacity-90`}>{entry.teacher}</div>
+                                        </div>
                                       </div>
-                                      <div className={`text-xs ${styles.text} opacity-90`}>{entry!.teacher}</div>
-                                    </div>
-                                  )}
+                                    )
+                                  })}
                                 </div>
                               ) : (
                                 <div className="p-3 rounded-lg bg-slate-50/50 border-2 border-slate-100">
